@@ -3,12 +3,11 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
- 
   "scripts": {
-  "dev": "ts-node-dev --respawn --transpile-only --loader ts-node/esm src/index.ts",
-  "build": "tsc",
-  "start": "node dist/index.js"
-},
+    "dev": "ts-node-dev --respawn --transpile-only --loader ts-node/esm src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/zaraakhtar/yt-script-AI-agent-backend.git"
@@ -22,7 +21,9 @@
   "homepage": "https://github.com/zaraakhtar/yt-script-AI-agent-backend#readme",
   "dependencies": {
     "cors": "^2.8.5",
-    "express": "^5.1.0"
+    "express": "^5.1.0",
+    "youtube-transcript": "^1.2.1",
+    "youtubei.js": "^15.1.1"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
