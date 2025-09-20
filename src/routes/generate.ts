@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { jobStore } from '../store/inMemoryJobs.js';
 import { fetchTranscript } from '../services/transcriptService.js';
 import { analyzeTranscript, generateScriptFromBlueprint } from '../services/aiService.js';
-import { Job } from '../types/job.js'; // Add this import
+import { Job } from '../types/job.js';
 
 export const generateRouter = Router();
 
