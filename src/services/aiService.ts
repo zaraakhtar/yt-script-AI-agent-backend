@@ -1,10 +1,21 @@
-import OpenAI from 'openai';
+// src/services/aiService.ts
+
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { ANALYZE_PROMPT, GENERATE_PROMPT } from '../prompts.js';
 
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Get API key from environment variables
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+if (!GEMINI_API_KEY) {
+  throw new Error('The GEMINI_API_KEY environment variable is missing or empty.');
+}
+
+// Initialize Google Gemini client
+const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+
+// Select the models
+const analysisModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash-latest' });
+const generationModel = genAI.getGenerativeModel({ model: 'gemini-1.5-pro-latest' });
+
 
 export interface Analysis {
   structure: string[];
@@ -14,45 +25,42 @@ export interface Analysis {
 }
 
 /**
- * Analyze transcript using OpenAI to extract structure and key elements
+ * Analyze transcript using Gemini to extract structure and key elements
  * Handles token limits by truncating long transcripts
  */
 export async function analyzeTranscript(transcript: string): Promise<Analysis> {
   try {
-    // Truncate transcript to manage token limits (approximately 3500 chars = ~875 tokens)
+    // Truncate transcript to manage token limits (approximately 3500 chars)
     const truncatedTranscript = transcript.length > 3500 
       ? transcript.substring(0, 3500) + '...'
       : transcript;
 
-    console.log(`Analyzing transcript (${truncatedTranscript.length} chars)...`);
+    console.log(`Analyzing transcript (${truncatedTranscript.length} chars) with Gemini...`);
+    
+    // Construct the full prompt for Gemini
+    const fullPrompt = `You are an expert YouTube script analyst. Always return valid JSON. Do not include markdown formatting like \`\`\`json in your response.
 
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini', // More cost-effective for analysis
-      messages: [
-        {
-          role: 'system',
-          content: 'You are an expert YouTube script analyst. Always return valid JSON.'
-        },
-        {
-          role: 'user',
-          content: ANALYZE_PROMPT + truncatedTranscript
-        }
-      ],
-      temperature: 0.3,
-      max_tokens: 800, // Conservative limit for JSON response
-    });
+    ${ANALYZE_PROMPT}
+    
+    Transcript:
+    ${truncatedTranscript}`;
 
-    const content = response.choices[0]?.message?.content;
+    const result = await analysisModel.generateContent(fullPrompt);
+    const response = await result.response;
+    const content = response.text();
+
     if (!content) {
-      throw new Error('No response from OpenAI');
+      throw new Error('No response from Gemini');
     }
 
     // Parse and validate JSON response
     let analysis: Analysis;
     try {
-      analysis = JSON.parse(content.trim());
+      // Clean the response to ensure it's valid JSON before parsing
+      const cleanedContent = content.replace(/```json/g, '').replace(/```/g, '').trim();
+      analysis = JSON.parse(cleanedContent);
     } catch (parseError) {
-      console.error('Failed to parse OpenAI response as JSON:', content);
+      console.error('Failed to parse Gemini response as JSON:', content);
       throw new Error('Invalid JSON response from AI analysis');
     }
 
@@ -68,17 +76,17 @@ export async function analyzeTranscript(transcript: string): Promise<Analysis> {
     return validatedAnalysis;
 
   } catch (error) {
-    console.error('AI analysis error:', error);
+    console.error('Gemini analysis error:', error);
     if (error instanceof Error) {
-      throw new Error(`AI analysis failed: ${error.message}`);
+      throw new Error(`Gemini analysis failed: ${error.message}`);
     } else {
-      throw new Error('AI analysis failed: Unknown error');
+      throw new Error('Gemini analysis failed: Unknown error');
     }
   }
 }
 
 /**
- * Generate original script from blueprint using OpenAI
+ * Generate original script from blueprint using Gemini
  */
 export async function generateScriptFromBlueprint(
   blueprint: any,
@@ -86,40 +94,29 @@ export async function generateScriptFromBlueprint(
   targetWordCount: number
 ): Promise<string> {
   try {
-    console.log(`Generating script for "${title}" (target: ${targetWordCount} words)...`);
+    console.log(`Generating script for "${title}" (target: ${targetWordCount} words) with Gemini...`);
 
     const prompt = GENERATE_PROMPT
       .replace('{blueprint}', JSON.stringify(blueprint, null, 2))
       .replace('{title}', title)
       .replace('{targetWordCount}', targetWordCount.toString());
 
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o', // Use full GPT-4o for creative generation
-      messages: [
-        {
-          role: 'system',
-          content: 'You are a professional YouTube script writer. Write engaging, original content that follows the provided structure.'
-        },
-        {
-          role: 'user',
-          content: prompt
-        }
-      ],
-      temperature: 0.7, // More creative for script generation
-      max_tokens: Math.min(3000, Math.ceil(targetWordCount * 1.5)), // Allow for overhead
-    });
+    const fullPrompt = `You are a professional YouTube script writer. Write engaging, original content that follows the provided structure. Do not add any introductory phrases like "Here is the script". Just return the raw script text.
 
-    const script = response.choices[0]?.message?.content;
+    ${prompt}`;
+    
+    const result = await generationModel.generateContent(fullPrompt);
+    const response = result.response;
+    const script = response.text();
+
     if (!script) {
-      throw new Error('No script generated from OpenAI');
+      throw new Error('No script generated from Gemini');
     }
 
     console.log(`Script generated (${script.length} characters)`);
     
-    // Log token usage for cost monitoring
-    if (response.usage) {
-      console.log(`Token usage: ${response.usage.prompt_tokens} prompt + ${response.usage.completion_tokens} completion = ${response.usage.total_tokens} total`);
-    }
+    // Note: Gemini API response does not provide token usage in the same way as OpenAI.
+    // You can monitor usage in your Google AI Studio dashboard.
 
     return script.trim();
 

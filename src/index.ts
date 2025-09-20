@@ -1,10 +1,13 @@
+// src/index.ts
+
+import dotenv from 'dotenv';
+// Load environment variables FIRST
+dotenv.config();
+
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import { generateRouter } from './routes/generate.js';
 
-// Load environment variables
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;

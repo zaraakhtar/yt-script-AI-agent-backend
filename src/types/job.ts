@@ -1,6 +1,17 @@
+// src/types/job.ts (Updated and Complete)
+
+export type JobStatus = 
+  | 'queued' 
+  | 'fetching' 
+  | 'analyzing' 
+  | 'generating' 
+  | 'formatting' // <-- ADD THIS LINE
+  | 'done' 
+  | 'error';
+
 export interface Job {
   id: string;
-  status: 'queued' | 'fetching' | 'analyzing' | 'generating' | 'done' | 'error';
+  status: JobStatus;
   logs: string[];
   createdAt: Date;
   urls: string[];

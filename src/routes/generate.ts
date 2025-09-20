@@ -1,3 +1,5 @@
+// src/routes/generate.ts (Updated and Complete)
+
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { jobStore } from '../store/inMemoryJobs.js';
@@ -82,57 +84,103 @@ generateRouter.get('/status/:jobId', (req, res) => {
   });
 });
 
-// Process job asynchronously
+// Process job asynchronously (Fully Updated and Robust)
 async function processJob(jobId: string) {
   const job = jobStore.get(jobId);
   if (!job) return;
 
   try {
-    // Step 1: Fetch transcripts
+    // Step 1: Fetch transcripts (Resilient)
     job.status = 'fetching';
     job.logs.push('Fetching transcripts from YouTube...');
-
     const transcripts = [];
+    let failedFetches = 0;
     for (const url of job.urls) {
-      job.logs.push(`Fetching transcript for: ${url}`);
-      const transcript = await fetchTranscript(url);
-      transcripts.push(transcript);
+      try {
+        job.logs.push(`Fetching transcript for: ${url}`);
+        const transcript = await fetchTranscript(url);
+        transcripts.push(transcript);
+      } catch (error: any) {
+        failedFetches++;
+        const errorMessage = error.message || 'Unknown error';
+        console.error(`Failed to fetch transcript for ${url}:`, error);
+        job.logs.push(`⚠️ Skipped ${url}: ${errorMessage}`);
+      }
     }
 
-    // Step 2: Analyze transcripts
+    if (transcripts.length === 0) {
+      throw new Error(`Could not fetch any transcripts. ${failedFetches} link(s) failed.`);
+    }
+    if (failedFetches > 0) {
+      job.logs.push(`Proceeding with ${transcripts.length} out of ${job.urls.length} successful transcripts.`);
+    }
+
+    // Step 2: Analyze transcripts (Resilient)
     job.status = 'analyzing';
     job.logs.push(`Analyzing ${transcripts.length} transcript(s) with AI...`);
 
     const analyses = [];
     for (let i = 0; i < transcripts.length; i++) {
-      job.logs.push(`Analyzing transcript ${i + 1}/${transcripts.length}...`);
-      const analysis = await analyzeTranscript(transcripts[i].raw);
-      analyses.push(analysis);
+      try {
+        job.logs.push(`Analyzing transcript ${i + 1}/${transcripts.length}...`);
+        const transcriptData = transcripts[i]; 
+        const analysis = await analyzeTranscript(transcriptData.raw);
+        analyses.push(analysis);
+      } catch (error: any) {
+        console.error(`Failed to analyze transcript ${i + 1}:`, error);
+        job.logs.push(`⚠️ Analysis failed for transcript ${i + 1}, skipping it.`);
+      }
     }
 
-    // Step 3: Create master blueprint
+    // Step 3: Create master blueprint (Handles empty/failed analyses)
     job.logs.push('Creating master blueprint from analyses...');
     const blueprint = createMasterBlueprint(analyses);
+    if (analyses.length === 0) {
+        job.logs.push('⚠️ All analyses failed. Using a default script template.');
+    }
 
-    // Step 4: Generate script
+    // Step 4: Generate script (With Retry Logic)
     job.status = 'generating';
     job.logs.push('Generating original script...');
 
-    const script = await generateScriptFromBlueprint(
-      blueprint, 
-      job.title, 
-      job.targetWordCount
-    );
+    let script = '';
+    let attempts = 0;
+    const maxAttempts = 2; // Try a total of 2 times
+
+    while (attempts < maxAttempts && !script) {
+        try {
+            attempts++;
+            if (attempts > 1) {
+                job.logs.push(`Retrying script generation (Attempt ${attempts}/${maxAttempts})...`);
+            }
+            script = await generateScriptFromBlueprint(
+                blueprint,
+                job.title,
+                job.targetWordCount
+            );
+        } catch (error: any) {
+            console.error(`Script generation attempt ${attempts} failed:`, error);
+            job.logs.push(`⚠️ Script generation attempt ${attempts} failed.`);
+            if (attempts >= maxAttempts) {
+                throw new Error(`AI script generation failed after ${maxAttempts} attempts.`);
+            }
+        }
+    }
+
+    // Step 5: Output Formatting & Cleaning (New Step)
+    job.status = 'formatting';
+    job.logs.push('Formatting and cleaning the final script...');
+    const finalScript = formatAndCleanScript(script, job.targetWordCount);
 
     // Complete job
     job.status = 'done';
-    job.result = script;
-    job.logs.push('Script generation completed!');
+    job.result = finalScript;
+    job.logs.push('✅ Script generation completed!');
 
-  } catch (error) {
+  } catch (error: any) {
     job.status = 'error';
-    job.error = (error instanceof Error) ? error.message : String(error);
-    job.logs.push(`Error: ${(error instanceof Error) ? error.message : String(error)}`);
+    job.error = error.message || String(error);
+    job.logs.push(`❌ Error: ${error.message || String(error)}`);
     console.error(`Job ${jobId} processing error:`, error);
   }
 }
@@ -162,11 +210,23 @@ function createMasterBlueprint(analyses: any[]) {
 function getProgressPercentage(status: string): number {
   switch (status) {
     case 'queued': return 0;
-    case 'fetching': return 25;
-    case 'analyzing': return 50;
-    case 'generating': return 75;
+    case 'fetching': return 20;
+    case 'analyzing': return 40;
+    case 'generating': return 60;
+    case 'formatting': return 90; // New step added
     case 'done': return 100;
     case 'error': return 0;
     default: return 0;
   }
+}
+
+// New helper function for final script cleaning
+function formatAndCleanScript(script: string, targetWordCount: number): string {
+    let cleanedScript = script.trim();
+    
+    // You can add more advanced cleaning logic here in the future
+    const actualWordCount = cleanedScript.split(/\s+/).length;
+    console.log(`Final script word count: ${actualWordCount} (Target: ${targetWordCount})`);
+
+    return cleanedScript;
 }

@@ -1,120 +1,86 @@
-import { Innertube } from 'youtubei.js';
-import xml2js from 'xml2js';
+import { YoutubeTranscript } from 'youtube-transcript';
+import { getSubtitles } from 'youtube-captions-scraper';
 import { extractVideoId } from '../utils/extractVideoId.js';
 
-// Polyfill fetch for Node.js if not available
-// Remove/comment this if you already have fetch globally available
-if (typeof fetch === 'undefined') {
-  // @ts-ignore
-  global.fetch = (...args: any[]) => import('node-fetch').then(({default: fetch}) => fetch(...args));
-}
-
-export interface TranscriptSegment {
+interface TranscriptSegment {
   text: string;
-  start: number;
   duration: number;
+  offset: number;
 }
 
-export interface TranscriptResult {
+export interface Transcript {
   raw: string;
   segments: TranscriptSegment[];
 }
 
-export class TranscriptDisabledError extends Error {
-  constructor(videoId: string) {
-    super(`Captions/transcripts are not available for video: ${videoId}`);
-    this.name = 'TranscriptDisabledError';
-  }
+// NEW: Define the shape of the data from the fallback library
+interface CaptionLine {
+  text: string;
+  dur: string;
+  start: string;
 }
 
-export async function fetchTranscript(videoIdOrUrl: string): Promise<TranscriptResult> {
+/**
+ * Fetches the transcript for a given YouTube URL using a primary and a fallback method.
+ * @param url The YouTube URL.
+ * @returns A promise that resolves to the transcript object.
+ */
+export async function fetchTranscript(url: string): Promise<Transcript> {
+  const videoId = extractVideoId(url);
+  if (!videoId) {
+    throw new Error('Invalid YouTube URL: Could not extract video ID.');
+  }
+
+  // --- Method 1: Try 'youtube-transcript' first ---
   try {
-    const videoId = extractVideoId(videoIdOrUrl);
+    console.log(`[Attempt 1/2] Fetching transcript for ${videoId} using 'youtube-transcript'`);
+    const transcriptSegments: TranscriptSegment[] = await YoutubeTranscript.fetchTranscript(videoId, {
+      lang: 'en'
+    });
+
+    if (!transcriptSegments || transcriptSegments.length === 0) {
+      throw new Error('Primary library returned an empty transcript.');
+    }
     
-    // Create YouTube instance
-    const yt = await Innertube.create();
+    const rawTranscript = transcriptSegments.map(segment => segment.text).join(' ');
+    console.log(`✅ Success with primary library.`);
     
-    // Get video info
-    const info = await yt.getInfo(videoId);
-    
-    if (!info.captions || !info.captions.caption_tracks?.length) {
-      throw new TranscriptDisabledError(videoId);
-    }
-
-    // Find English captions or use first available
-    let captionTrack = info.captions.caption_tracks.find(
-      track => track.language_code === 'en' || track.language_code?.startsWith('en')
-    );
-    
-    if (!captionTrack) {
-      captionTrack = info.captions.caption_tracks[0];
-    }
-
-    if (!captionTrack?.base_url) {
-      throw new TranscriptDisabledError(videoId);
-    }
-
-    // Fetch caption XML
-    const response: any = await fetch(captionTrack.base_url);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch captions: ${response.statusText}`);
-    }
-
-    const xmlContent = await response.text();
-    
-    // Parse XML to get transcript segments
-    const parser = new xml2js.Parser();
-    const result = await parser.parseStringPromise(xmlContent);
-    
-    if (!result.transcript?.text) {
-      throw new TranscriptDisabledError(videoId);
-    }
-
-    const segments: TranscriptSegment[] = [];
-    let rawText = '';
-
-    for (const textNode of result.transcript.text) {
-      const text = textNode._ || textNode || '';
-      const start = parseFloat(textNode.$.start || '0');
-      const duration = parseFloat(textNode.$.dur || '0');
-      
-      if (text.trim()) {
-        // Clean up text (remove HTML entities, extra spaces)
-        const cleanText = text
-          .replace(/&amp;/g, '&')
-          .replace(/&lt;/g, '<')
-          .replace(/&gt;/g, '>')
-          .replace(/&quot;/g, '"')
-          .replace(/&#39;/g, "'")
-          .replace(/\s+/g, ' ')
-          .trim();
-
-        segments.push({
-          text: cleanText,
-          start,
-          duration
-        });
-
-        rawText += cleanText + ' ';
-      }
-    }
-
-    if (!rawText.trim()) {
-      throw new TranscriptDisabledError(videoId);
-    }
-
     return {
-      raw: rawText.trim(),
-      segments
+      raw: rawTranscript,
+      segments: transcriptSegments,
     };
 
-  } catch (error) {
-    if (error instanceof TranscriptDisabledError) {
-      throw error;
+  } catch (primaryError: any) {
+    console.warn(`⚠️ Primary library failed: ${primaryError.message}. Trying fallback...`);
+
+    // --- Method 2: Fallback to 'youtube-captions-scraper' ---
+    try {
+      console.log(`[Attempt 2/2] Fetching transcript for ${videoId} using 'youtube-captions-scraper'`);
+      const captions = await getSubtitles({ videoID: videoId, lang: 'en' });
+      
+      if (!captions || captions.length === 0) {
+        throw new Error('Fallback library also returned an empty transcript.');
+      }
+      
+      // THE FIX: We explicitly tell TypeScript the type of 'line'
+      const transcriptSegments: TranscriptSegment[] = captions.map((line: CaptionLine) => ({
+        text: line.text,
+        duration: parseFloat(line.dur),
+        offset: parseFloat(line.start)
+      }));
+
+      const rawTranscript = transcriptSegments.map(segment => segment.text).join(' ');
+      console.log(`✅ Success with fallback library.`);
+
+      return {
+        raw: rawTranscript,
+        segments: transcriptSegments,
+      };
+
+    } catch (fallbackError: any)
+{
+      console.error('❌ Both primary and fallback transcript methods failed.');
+      throw new Error(`Could not retrieve transcript for this video: ${fallbackError.message}`);
     }
-    
-    console.error('Transcript fetch error:', error);
-    const errorMessage = (error instanceof Error) ? error.message : String(error);
-    throw new Error(`Failed to fetch transcript: ${errorMessage}`);
   }
 }
