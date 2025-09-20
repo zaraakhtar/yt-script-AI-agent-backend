@@ -1,34 +1,46 @@
-import express from "express";
-import cors from "cors";
-import { YoutubeTranscript } from "youtube-transcript";
+import express from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import { generateRouter } from './routes/generate.js';
+
+// Load environment variables
+dotenv.config();
 
 const app = express();
-app.use(cors());
-app.use(express.json());
+const PORT = process.env.PORT || 3000;
 
-app.post("/generate", async (req, res) => {
-  const { urls, title, wordCount } = req.body;
+// Middleware
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production' 
+    ? ['https://your-expo-app.com'] // Replace with your Expo app URL in production
+    : ['http://localhost:19006', 'exp://192.168.1.100:19000'] // Local development
+}));
+app.use(express.json({ limit: '10mb' }));
 
-  if (!urls || urls.length === 0) {
-    return res.status(400).json({ error: "Please provide at least one YouTube URL" });
-  }
-
-  try {
-    // Fetch transcript of the first YouTube video
-    const transcript = await YoutubeTranscript.fetchTranscript(urls[0]);
-
-    res.json({
-      message: "Transcript fetched ✅",
-      transcript, // raw transcript data
-      title,
-      wordCount,
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Failed to fetch transcript" });
-  }
+// Routes
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString(),
+    version: '1.0.0' 
+  });
 });
 
-app.listen(5000, () => {
-  console.log("Server running on http://localhost:5000");
+app.use('/api', generateRouter);
+
+// Error handling middleware
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('Error:', err);
+  res.status(500).json({ 
+    error: 'Internal server error',
+    message: err.message 
+  });
 });
+
+// Start server
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+  console.log(`Health check: http://localhost:${PORT}/health`);
+});
+
+export default app;
