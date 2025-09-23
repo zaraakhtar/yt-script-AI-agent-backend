@@ -15,8 +15,7 @@
     "openai": "^4.20.1",
     "uuid": "^9.0.1",
     "xml2js": "^0.6.2",
-    "youtube-captions-scraper": "^2.0.3",
-    "youtube-transcript": "^1.2.1"
+    "youtube-transcript-plus": "^1.1.1"
   },
   "devDependencies": {
     "@types/cors": "^2.8.15",

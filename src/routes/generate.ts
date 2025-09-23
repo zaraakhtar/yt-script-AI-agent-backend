@@ -1,4 +1,4 @@
-// src/routes/generate.ts (Updated and Complete)
+// src/routes/generate.ts (The Complete and Final Version)
 
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
@@ -7,6 +7,7 @@ import { fetchTranscript } from '../services/transcriptService.js';
 import { analyzeTranscript, generateScriptFromBlueprint } from '../services/aiService.js';
 import { Job } from '../types/job.js';
 
+// The router is defined and exported here
 export const generateRouter = Router();
 
 // POST /api/generate - Start script generation
@@ -16,21 +17,13 @@ generateRouter.post('/generate', async (req, res) => {
 
     // Validation
     if (!urls || !Array.isArray(urls) || urls.length < 1 || urls.length > 3) {
-      return res.status(400).json({ 
-        error: 'urls must be an array with 1-3 YouTube URLs' 
-      });
+      return res.status(400).json({ error: 'urls must be an array with 1-3 YouTube URLs' });
     }
-
     if (!title || typeof title !== 'string') {
-      return res.status(400).json({ 
-        error: 'title is required and must be a string' 
-      });
+      return res.status(400).json({ error: 'title is required and must be a string' });
     }
-
     if (typeof targetWordCount !== 'number' || targetWordCount < 100 || targetWordCount > 2000) {
-      return res.status(400).json({ 
-        error: 'targetWordCount must be between 100 and 2000' 
-      });
+      return res.status(400).json({ error: 'targetWordCount must be between 100 and 2000' });
     }
 
     // Create job
@@ -123,7 +116,7 @@ async function processJob(jobId: string) {
     for (let i = 0; i < transcripts.length; i++) {
       try {
         job.logs.push(`Analyzing transcript ${i + 1}/${transcripts.length}...`);
-        const transcriptData = transcripts[i]; 
+        const transcriptData = transcripts[i];
         const analysis = await analyzeTranscript(transcriptData.raw);
         analyses.push(analysis);
       } catch (error: any) {
@@ -136,7 +129,7 @@ async function processJob(jobId: string) {
     job.logs.push('Creating master blueprint from analyses...');
     const blueprint = createMasterBlueprint(analyses);
     if (analyses.length === 0) {
-        job.logs.push('⚠️ All analyses failed. Using a default script template.');
+      job.logs.push('⚠️ All analyses failed. Using a default script template.');
     }
 
     // Step 4: Generate script (With Retry Logic)
@@ -145,26 +138,26 @@ async function processJob(jobId: string) {
 
     let script = '';
     let attempts = 0;
-    const maxAttempts = 2; // Try a total of 2 times
+    const maxAttempts = 2;
 
     while (attempts < maxAttempts && !script) {
-        try {
-            attempts++;
-            if (attempts > 1) {
-                job.logs.push(`Retrying script generation (Attempt ${attempts}/${maxAttempts})...`);
-            }
-            script = await generateScriptFromBlueprint(
-                blueprint,
-                job.title,
-                job.targetWordCount
-            );
-        } catch (error: any) {
-            console.error(`Script generation attempt ${attempts} failed:`, error);
-            job.logs.push(`⚠️ Script generation attempt ${attempts} failed.`);
-            if (attempts >= maxAttempts) {
-                throw new Error(`AI script generation failed after ${maxAttempts} attempts.`);
-            }
+      try {
+        attempts++;
+        if (attempts > 1) {
+          job.logs.push(`Retrying script generation (Attempt ${attempts}/${maxAttempts})...`);
         }
+        script = await generateScriptFromBlueprint(
+          blueprint,
+          job.title,
+          job.targetWordCount
+        );
+      } catch (error: any) {
+        console.error(`Script generation attempt ${attempts} failed:`, error);
+        job.logs.push(`⚠️ Script generation attempt ${attempts} failed.`);
+        if (attempts >= maxAttempts) {
+          throw new Error(`AI script generation failed after ${maxAttempts} attempts.`);
+        }
+      }
     }
 
     // Step 5: Output Formatting & Cleaning (New Step)
@@ -187,14 +180,9 @@ async function processJob(jobId: string) {
 
 // Helper function to create master blueprint from analyses
 function createMasterBlueprint(analyses: any[]) {
-  // Combine structure elements (dedupe while preserving order)
   const allStructures = analyses.flatMap(a => a.structure || []);
   const uniqueStructure = [...new Set(allStructures)];
-
-  // Combine main points
   const allMainPoints = analyses.flatMap(a => a.main_points || []);
-
-  // Use first non-empty hook and CTA
   const hookExample = analyses.find(a => a.hook_example)?.hook_example || '';
   const cta = analyses.find(a => a.cta)?.cta || 'Subscribe for more content!';
 
@@ -213,7 +201,7 @@ function getProgressPercentage(status: string): number {
     case 'fetching': return 20;
     case 'analyzing': return 40;
     case 'generating': return 60;
-    case 'formatting': return 90; // New step added
+    case 'formatting': return 90;
     case 'done': return 100;
     case 'error': return 0;
     default: return 0;
@@ -222,11 +210,8 @@ function getProgressPercentage(status: string): number {
 
 // New helper function for final script cleaning
 function formatAndCleanScript(script: string, targetWordCount: number): string {
-    let cleanedScript = script.trim();
-    
-    // You can add more advanced cleaning logic here in the future
-    const actualWordCount = cleanedScript.split(/\s+/).length;
-    console.log(`Final script word count: ${actualWordCount} (Target: ${targetWordCount})`);
-
-    return cleanedScript;
+  let cleanedScript = script.trim();
+  const actualWordCount = cleanedScript.split(/\s+/).length;
+  console.log(`Final script word count: ${actualWordCount} (Target: ${targetWordCount})`);
+  return cleanedScript;
 }

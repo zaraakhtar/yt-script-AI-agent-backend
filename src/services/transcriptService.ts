@@ -1,7 +1,9 @@
-import { YoutubeTranscript } from 'youtube-transcript';
-import { getSubtitles } from 'youtube-captions-scraper';
+// src/services/transcriptService.ts (Final version using youtube-transcript-plus)
+
+import { fetchTranscript as fetchTranscriptPlus } from 'youtube-transcript-plus';
 import { extractVideoId } from '../utils/extractVideoId.js';
 
+// --- Interfaces ---
 interface TranscriptSegment {
   text: string;
   duration: number;
@@ -13,17 +15,8 @@ export interface Transcript {
   segments: TranscriptSegment[];
 }
 
-// NEW: Define the shape of the data from the fallback library
-interface CaptionLine {
-  text: string;
-  dur: string;
-  start: string;
-}
-
 /**
- * Fetches the transcript for a given YouTube URL using a primary and a fallback method.
- * @param url The YouTube URL.
- * @returns A promise that resolves to the transcript object.
+ * Fetches a transcript using the robust 'youtube-transcript-plus' library.
  */
 export async function fetchTranscript(url: string): Promise<Transcript> {
   const videoId = extractVideoId(url);
@@ -31,56 +24,32 @@ export async function fetchTranscript(url: string): Promise<Transcript> {
     throw new Error('Invalid YouTube URL: Could not extract video ID.');
   }
 
-  // --- Method 1: Try 'youtube-transcript' first ---
   try {
-    console.log(`[Attempt 1/2] Fetching transcript for ${videoId} using 'youtube-transcript'`);
-    const transcriptSegments: TranscriptSegment[] = await YoutubeTranscript.fetchTranscript(videoId, {
-      lang: 'en'
+    console.log(`Fetching transcript for video ID: ${videoId} using 'youtube-transcript-plus'...`);
+    
+    const transcriptData = await fetchTranscriptPlus(videoId, {
+      lang: 'en', // Explicitly request English
     });
 
-    if (!transcriptSegments || transcriptSegments.length === 0) {
-      throw new Error('Primary library returned an empty transcript.');
+    if (!transcriptData || transcriptData.length === 0) {
+      throw new Error('Library returned an empty transcript.');
     }
-    
-    const rawTranscript = transcriptSegments.map(segment => segment.text).join(' ');
-    console.log(`✅ Success with primary library.`);
-    
+
+    // The library already returns the data in the format we need.
+    const segments: TranscriptSegment[] = transcriptData;
+
+    const rawTranscript = segments.map(segment => segment.text).join(' ');
+
+    console.log(`✅ Successfully fetched transcript (${rawTranscript.length} characters).`);
+
     return {
       raw: rawTranscript,
-      segments: transcriptSegments,
+      segments: segments,
     };
 
-  } catch (primaryError: any) {
-    console.warn(`⚠️ Primary library failed: ${primaryError.message}. Trying fallback...`);
-
-    // --- Method 2: Fallback to 'youtube-captions-scraper' ---
-    try {
-      console.log(`[Attempt 2/2] Fetching transcript for ${videoId} using 'youtube-captions-scraper'`);
-      const captions = await getSubtitles({ videoID: videoId, lang: 'en' });
-      
-      if (!captions || captions.length === 0) {
-        throw new Error('Fallback library also returned an empty transcript.');
-      }
-      
-      // THE FIX: We explicitly tell TypeScript the type of 'line'
-      const transcriptSegments: TranscriptSegment[] = captions.map((line: CaptionLine) => ({
-        text: line.text,
-        duration: parseFloat(line.dur),
-        offset: parseFloat(line.start)
-      }));
-
-      const rawTranscript = transcriptSegments.map(segment => segment.text).join(' ');
-      console.log(`✅ Success with fallback library.`);
-
-      return {
-        raw: rawTranscript,
-        segments: transcriptSegments,
-      };
-
-    } catch (fallbackError: any)
-{
-      console.error('❌ Both primary and fallback transcript methods failed.');
-      throw new Error(`Could not retrieve transcript for this video: ${fallbackError.message}`);
-    }
+  } catch (error: any) {
+    console.error(`Failed to fetch transcript for video ID ${videoId}:`, error);
+    // The library throws specific errors, which we can pass along.
+    throw new Error(`Failed to get transcript for ${videoId}: ${error.message}`);
   }
 }
