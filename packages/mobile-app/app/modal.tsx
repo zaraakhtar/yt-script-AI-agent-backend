@@ -1,8 +1,9 @@
 import { Link } from 'expo-router';
 import { StyleSheet } from 'react-native';
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
+// Update the import path if the alias is incorrect or not configured
+import { ThemedText } from '../src/components/themed-text';
+import { ThemedView } from '../src/components/themed-view';
 
 export default function ModalScreen() {
   return (

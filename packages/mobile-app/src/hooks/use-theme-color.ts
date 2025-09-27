@@ -1,10 +1,7 @@
-/**
- * Learn more about light and dark modes:
- * https://docs.expo.dev/guides/color-schemes/
- */
+import { useColorScheme } from 'react-native';
 
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+// THE FIX: The path alias already points to src, so we just need 'constants/theme'
+import { Colors } from '../constants/theme';
 
 export function useThemeColor(
   props: { light?: string; dark?: string },

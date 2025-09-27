@@ -3,8 +3,9 @@
   "compilerOptions": {
     "strict": true,
     "paths": {
+      // THE FIX: This tells the project that "@/" means "./src/"
       "@/*": [
-        "./*"
+        "./src/*"
       ]
     }
   },

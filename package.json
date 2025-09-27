@@ -1,5 +1,5 @@
 {
-    "name": "ai-script-agent-monorepo",
+  "name": "ai-script-agent-monorepo",
   "private": true,
   "version": "1.0.0",
   "scripts": {
@@ -8,5 +8,8 @@
   },
   "workspaces": [
     "packages/*"
-  ]
+  ],
+  "dependencies": {
+    "expo-clipboard": "~8.0.7"
+  }
 }
